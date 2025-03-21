@@ -10,12 +10,14 @@
         #map { height: 85vh; width: 100%; }
         h1 { margin: 10px; }
         #counter { font-size: 18px; margin-bottom: 10px; }
+        #loading { position: absolute; bottom: 20px; left: 20px; background: white; padding: 10px; border-radius: 5px; z-index: 1000; }
     </style>
 </head>
 <body>
     <h1>Visited Countries</h1>
     <p id="counter"></p>
     <div id="map"></div>
+    <div id="loading" style="display:none;">Loading map data...</div>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="countries.js"></script>
     <script>
@@ -26,18 +28,50 @@
         
         document.getElementById("counter").innerText = "Visited Countries: " + visitedCountries.length;
         
-        fetch("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson")
-            .then(response => response.json())
-            .then(data => {
-                L.geoJSON(data, {
-                    style: feature => {
-                        return visitedCountries.includes(feature.properties.ADM0_A3) ? 
-                            { fillColor: 'green', color: 'black', weight: 1, fillOpacity: 0.7 } : 
-                            { fillColor: 'transparent', color: 'gray', weight: 0.5 };
+        // Show loading indicator
+        const loadingEl = document.getElementById("loading");
+        loadingEl.style.display = "block";
+        
+        // Use lower resolution GeoJSON (50m instead of 10m) and implement caching
+        const geoJsonUrl = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson";
+        const cacheKey = "countriesGeoJson";
+        
+        // Try to get cached data first
+        const cachedData = localStorage.getItem(cacheKey);
+        
+        if (cachedData) {
+            // Use cached data
+            renderGeoJson(JSON.parse(cachedData));
+            loadingEl.style.display = "none";
+        } else {
+            // Fetch from remote source
+            fetch(geoJsonUrl)
+                .then(response => response.json())
+                .then(data => {
+                    // Cache the data
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify(data));
+                    } catch (e) {
+                        console.warn("Could not save to cache:", e);
                     }
-                }).addTo(map);
-            })
-            .catch(error => console.error("Error loading map data:", error));
+                    renderGeoJson(data);
+                    loadingEl.style.display = "none";
+                })
+                .catch(error => {
+                    console.error("Error loading map data:", error);
+                    loadingEl.textContent = "Error loading map data. Please refresh.";
+                });
+        }
+        
+        function renderGeoJson(data) {
+            L.geoJSON(data, {
+                style: feature => {
+                    return visitedCountries.includes(feature.properties.ADM0_A3) ? 
+                        { fillColor: 'green', color: 'black', weight: 1, fillOpacity: 0.7 } : 
+                        { fillColor: 'transparent', color: 'gray', weight: 0.5 };
+                }
+            }).addTo(map);
+        }
     </script>
 </body>
 </html>
