@@ -1,76 +1,649 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visited Countries</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <meta name="theme-color" content="#0f5132">
+    <title>Nasze odwiedzone kraje</title>
+    <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
     <style>
-        body { margin: 0; font-family: Arial, sans-serif; text-align: center; }
-        #map { height: 85vh; width: 100%; }
-        h1 { margin: 10px; }
-        #counter { font-size: 18px; margin-bottom: 10px; }
-        #loading { position: absolute; bottom: 20px; left: 20px; background: white; padding: 10px; border-radius: 5px; z-index: 1000; }
+        :root {
+            color-scheme: light;
+            --page: #f3f7f5;
+            --surface: #ffffff;
+            --surface-soft: #e7f0eb;
+            --text: #17241d;
+            --muted: #5c6d64;
+            --line: #d5e0da;
+            --brand: #176b45;
+            --brand-dark: #0f5132;
+            --brand-soft: #d9eee2;
+            --map-unvisited: #cbd6d0;
+            --shadow: 0 18px 50px rgba(29, 65, 46, 0.1);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--page);
+            color: var(--text);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        button { font: inherit; }
+
+        .page-header {
+            padding: 36px max(24px, calc((100% - 1180px) / 2)) 26px;
+            background:
+                radial-gradient(circle at 12% 0%, rgba(98, 180, 133, 0.22), transparent 34%),
+                linear-gradient(135deg, #123c2a 0%, #0b2419 100%);
+            color: #ffffff;
+        }
+
+        .eyebrow {
+            margin: 0 0 8px;
+            color: #b9ddc8;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        h1, h2, p { margin-top: 0; }
+
+        h1 {
+            margin-bottom: 10px;
+            font-size: clamp(2rem, 5vw, 3.4rem);
+            line-height: 1.02;
+            letter-spacing: -0.04em;
+        }
+
+        .intro {
+            max-width: 620px;
+            margin-bottom: 24px;
+            color: #d8e9df;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .person-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .person-tab {
+            min-width: 92px;
+            padding: 10px 18px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+            cursor: pointer;
+            font-weight: 700;
+            transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+        }
+
+        .person-tab:hover { background: rgba(255, 255, 255, 0.16); }
+
+        .person-tab:focus-visible {
+            outline: 3px solid #8ee0b0;
+            outline-offset: 3px;
+        }
+
+        .person-tab[aria-pressed="true"] {
+            border-color: #ffffff;
+            background: #ffffff;
+            color: var(--brand-dark);
+            transform: translateY(-1px);
+        }
+
+        main {
+            width: min(1180px, calc(100% - 32px));
+            margin: 28px auto 56px;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+            gap: 24px;
+            align-items: center;
+            margin-bottom: 22px;
+        }
+
+        .summary-copy h2 {
+            margin-bottom: 6px;
+            font-size: clamp(1.5rem, 3vw, 2.2rem);
+            letter-spacing: -0.03em;
+        }
+
+        .summary-copy p {
+            margin-bottom: 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .stat {
+            min-width: 0;
+            padding: 16px 18px;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: var(--surface);
+        }
+
+        .stat-label {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            display: block;
+            overflow-wrap: anywhere;
+            font-size: clamp(1.45rem, 3vw, 2rem);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+        }
+
+        .stat-detail {
+            display: block;
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .map-shell {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: var(--surface);
+            box-shadow: var(--shadow);
+        }
+
+        #map {
+            width: 100%;
+            height: clamp(440px, 64vh, 680px);
+            background: #dbe8e2;
+        }
+
+        .map-status,
+        .map-legend {
+            position: absolute;
+            z-index: 500;
+            border: 1px solid rgba(23, 36, 29, 0.12);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.94);
+            color: var(--text);
+            box-shadow: 0 6px 20px rgba(23, 36, 29, 0.12);
+            backdrop-filter: blur(8px);
+        }
+
+        .map-status {
+            top: 16px;
+            left: 50%;
+            padding: 10px 14px;
+            transform: translateX(-50%);
+            font-size: 0.9rem;
+        }
+
+        .map-legend {
+            right: 16px;
+            bottom: 16px;
+            display: flex;
+            gap: 16px;
+            padding: 10px 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            gap: 7px;
+            align-items: center;
+        }
+
+        .legend-swatch {
+            width: 13px;
+            height: 13px;
+            border: 1px solid rgba(23, 36, 29, 0.22);
+            border-radius: 4px;
+            background: var(--map-unvisited);
+        }
+
+        .legend-swatch.visited { background: var(--brand); }
+
+        .countries-section {
+            margin-top: 28px;
+            padding: 24px;
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            background: var(--surface);
+        }
+
+        .countries-header {
+            display: flex;
+            gap: 16px;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .countries-header h2 { margin-bottom: 0; }
+
+        .countries-header p {
+            margin-bottom: 0;
+            color: var(--muted);
+        }
+
+        .country-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .country-list li {
+            padding: 8px 11px;
+            border-radius: 9px;
+            background: var(--brand-soft);
+            color: var(--brand-dark);
+            font-size: 0.9rem;
+            font-weight: 650;
+        }
+
+        .map-note {
+            margin: 16px 0 0;
+            padding-top: 16px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .leaflet-tooltip {
+            border: 0;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(23, 36, 29, 0.18);
+            font-family: inherit;
+            font-weight: 700;
+        }
+
+        footer {
+            padding: 0 20px 28px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 760px) {
+            .page-header { padding-top: 28px; }
+
+            .summary { grid-template-columns: 1fr; }
+
+            .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+            .stat { padding: 13px; }
+
+            .stat-detail { display: none; }
+
+            .countries-header {
+                display: block;
+            }
+
+            .countries-header h2 { margin-bottom: 4px; }
+        }
+
+        @media (max-width: 520px) {
+            main { width: min(100% - 20px, 1180px); }
+
+            .person-tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
+
+            .person-tab { min-width: 0; padding-inline: 10px; }
+
+            .stats { grid-template-columns: 1fr; }
+
+            .stat {
+                display: grid;
+                grid-template-columns: 1fr auto;
+                gap: 2px 12px;
+                align-items: center;
+            }
+
+            .stat-label { margin-bottom: 0; }
+
+            .stat-value { grid-row: 1 / 3; grid-column: 2; }
+
+            .stat-detail { display: block; }
+
+            #map { height: 58vh; min-height: 410px; }
+
+            .map-legend {
+                right: 10px;
+                bottom: 10px;
+                gap: 10px;
+            }
+
+            .countries-section { padding: 18px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>Visited Countries</h1>
-    <p id="counter"></p>
-    <div id="map"></div>
-    <div id="loading" style="display:none;">Loading map data...</div>
+    <header class="page-header">
+        <p class="eyebrow">Mapa podróży</p>
+        <h1>Nasze odwiedzone kraje</h1>
+        <p class="intro">Wybierz osobę, aby zobaczyć jej mapę, liczbę odwiedzonych krajów i podróżnicze statystyki.</p>
+        <nav class="person-tabs" id="person-tabs" aria-label="Wybierz osobę"></nav>
+    </header>
+
+    <main>
+        <section class="summary" aria-live="polite" aria-atomic="true">
+            <div class="summary-copy">
+                <h2 id="person-heading">Darek</h2>
+                <p id="person-summary">Odwiedzone kraje Darka.</p>
+            </div>
+            <div class="stats" aria-label="Statystyki podróży">
+                <div class="stat">
+                    <span class="stat-label">Kraje</span>
+                    <strong class="stat-value" id="country-count">0</strong>
+                    <span class="stat-detail">na mapie</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Kontynenty</span>
+                    <strong class="stat-value" id="continent-count">0</strong>
+                    <span class="stat-detail" id="continent-names">—</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Europa / świat</span>
+                    <strong class="stat-value" id="europe-split">0 / 0</strong>
+                    <span class="stat-detail">kraje w Europie / poza nią</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="map-shell" aria-label="Mapa odwiedzonych krajów">
+            <div id="map" role="img" aria-label="Mapa świata z zaznaczonymi odwiedzonymi krajami"></div>
+            <div class="map-status" id="loading" role="status">Ładowanie danych mapy…</div>
+            <div class="map-legend" aria-label="Legenda mapy">
+                <span class="legend-item"><span class="legend-swatch visited" aria-hidden="true"></span> odwiedzone</span>
+                <span class="legend-item"><span class="legend-swatch" aria-hidden="true"></span> pozostałe</span>
+            </div>
+        </section>
+
+        <section class="countries-section">
+            <div class="countries-header">
+                <h2>Lista krajów</h2>
+                <p id="list-summary"></p>
+            </div>
+            <ul class="country-list" id="country-list"></ul>
+            <p class="map-note" id="map-note" hidden></p>
+        </section>
+    </main>
+
+    <footer>Granice państw: Natural Earth · Podkład mapy: OpenStreetMap</footer>
+
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="countries.js"></script>
     <script>
-        var map = L.map('map').setView([20, 0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
+        const tabsElement = document.getElementById("person-tabs");
+        const headingElement = document.getElementById("person-heading");
+        const personSummaryElement = document.getElementById("person-summary");
+        const countryCountElement = document.getElementById("country-count");
+        const continentCountElement = document.getElementById("continent-count");
+        const continentNamesElement = document.getElementById("continent-names");
+        const europeSplitElement = document.getElementById("europe-split");
+        const listSummaryElement = document.getElementById("list-summary");
+        const countryListElement = document.getElementById("country-list");
+        const mapNoteElement = document.getElementById("map-note");
+        const loadingElement = document.getElementById("loading");
+
+        let activeTraveler = travelers[0];
+        let countriesLayer = null;
+
+        validateTravelData();
+        createTravelerTabs();
+        renderTraveler();
+
+        const map = L.map("map", {
+            minZoom: 1,
+            worldCopyJump: true,
+        }).setView([28, 12], 2);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors",
+            maxZoom: 18,
         }).addTo(map);
-        
-        document.getElementById("counter").innerText = "Visited Countries: " + visitedCountries.length;
-        
-        // Show loading indicator
-        const loadingEl = document.getElementById("loading");
-        loadingEl.style.display = "block";
-        
-        // Use lower resolution GeoJSON (50m instead of 10m) and implement caching
+
         const geoJsonUrl = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson";
-        const cacheKey = "countriesGeoJson";
-        
-        // Try to get cached data first
-        const cachedData = localStorage.getItem(cacheKey);
-        
-        if (cachedData) {
-            // Use cached data
-            renderGeoJson(JSON.parse(cachedData));
-            loadingEl.style.display = "none";
-        } else {
-            // Fetch from remote source
-            fetch(geoJsonUrl)
-                .then(response => response.json())
-                .then(data => {
-                    // Cache the data
-                    try {
-                        localStorage.setItem(cacheKey, JSON.stringify(data));
-                    } catch (e) {
-                        console.warn("Could not save to cache:", e);
-                    }
-                    renderGeoJson(data);
-                    loadingEl.style.display = "none";
-                })
-                .catch(error => {
-                    console.error("Error loading map data:", error);
-                    loadingEl.textContent = "Error loading map data. Please refresh.";
-                });
-        }
-        
-        function renderGeoJson(data) {
-            L.geoJSON(data, {
-                style: feature => {
-                    return visitedCountries.includes(feature.properties.ADM0_A3) ? 
-                        { fillColor: 'green', color: 'black', weight: 1, fillOpacity: 0.7 } : 
-                        { fillColor: 'transparent', color: 'gray', weight: 0.5 };
+        const cacheKey = "countriesGeoJson-v2";
+
+        loadCountryBoundaries();
+
+        function validateTravelData() {
+            const ids = new Set();
+
+            travelers.forEach((traveler) => {
+                if (ids.has(traveler.id)) {
+                    throw new Error(`Powtórzony identyfikator osoby: ${traveler.id}`);
                 }
+                ids.add(traveler.id);
+
+                if (!traveler.countries.includes("POL")) {
+                    throw new Error(`${traveler.name} nie ma Polski na liście.`);
+                }
+
+                if (new Set(traveler.countries).size !== traveler.countries.length) {
+                    throw new Error(`${traveler.name} ma powtórzony kraj.`);
+                }
+
+                traveler.countries.forEach((code) => {
+                    if (!countryCatalog[code]) {
+                        throw new Error(`Brak kraju ${code} w katalogu.`);
+                    }
+                });
+            });
+        }
+
+        function createTravelerTabs() {
+            const fragment = document.createDocumentFragment();
+
+            travelers.forEach((traveler) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "person-tab";
+                button.dataset.travelerId = traveler.id;
+                button.textContent = traveler.name;
+                button.setAttribute("aria-pressed", String(traveler.id === activeTraveler.id));
+                button.addEventListener("click", () => selectTraveler(traveler.id));
+                fragment.appendChild(button);
+            });
+
+            tabsElement.appendChild(fragment);
+        }
+
+        function selectTraveler(travelerId) {
+            const nextTraveler = travelers.find((traveler) => traveler.id === travelerId);
+            if (!nextTraveler || nextTraveler.id === activeTraveler.id) return;
+
+            activeTraveler = nextTraveler;
+            tabsElement.querySelectorAll("button").forEach((button) => {
+                button.setAttribute("aria-pressed", String(button.dataset.travelerId === travelerId));
+            });
+
+            renderTraveler();
+            updateMap();
+        }
+
+        function renderTraveler() {
+            const countries = activeTraveler.countries;
+            const continentCounts = countries.reduce((counts, code) => {
+                const continent = countryCatalog[code].continent;
+                counts[continent] = (counts[continent] || 0) + 1;
+                return counts;
+            }, {});
+            const continents = Object.keys(continentCounts);
+            const europeCount = continentCounts.Europa || 0;
+            const outsideEuropeCount = countries.length - europeCount;
+
+            headingElement.textContent = activeTraveler.name;
+            personSummaryElement.textContent = `${activeTraveler.name} odwiedził${activeTraveler.name === "Ola" || activeTraveler.name === "Daria" ? "a" : ""} ${countries.length} ${countryWord(countries.length)}.`;
+            countryCountElement.textContent = countries.length;
+            continentCountElement.textContent = continents.length;
+            continentNamesElement.textContent = continents.join(", ");
+            europeSplitElement.textContent = `${europeCount} / ${outsideEuropeCount}`;
+            listSummaryElement.textContent = `${countries.length} ${countryWord(countries.length)}`;
+
+            const sortedCountries = countries
+                .map((code) => ({ code, name: countryDisplayName(code) }))
+                .sort((a, b) => a.name.localeCompare(b.name, "pl"));
+
+            countryListElement.replaceChildren(...sortedCountries.map(({ code, name }) => {
+                const item = document.createElement("li");
+                item.dataset.countryCode = code;
+                item.textContent = name;
+                return item;
+            }));
+
+            mapNoteElement.hidden = !activeTraveler.mapNote;
+            mapNoteElement.textContent = activeTraveler.mapNote || "";
+
+            document.title = `${activeTraveler.name} — odwiedzone kraje`;
+            document.getElementById("map").setAttribute(
+                "aria-label",
+                `Mapa świata. ${activeTraveler.name}: ${countries.length} odwiedzonych krajów.`,
+            );
+        }
+
+        function countryDisplayName(code) {
+            return activeTraveler.countryLabelOverrides?.[code] || countryCatalog[code].name;
+        }
+
+        function countryWord(count) {
+            if (count === 1) return "kraj";
+            const lastTwoDigits = count % 100;
+            const lastDigit = count % 10;
+            return lastDigit >= 2 && lastDigit <= 4 && !(lastTwoDigits >= 12 && lastTwoDigits <= 14)
+                ? "kraje"
+                : "krajów";
+        }
+
+        async function loadCountryBoundaries() {
+            const cached = getCachedBoundaries();
+            if (cached) {
+                renderGeoJson(cached);
+                loadingElement.hidden = true;
+                return;
+            }
+
+            try {
+                const response = await fetch(geoJsonUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+
+                try {
+                    localStorage.setItem(cacheKey, JSON.stringify(data));
+                } catch (error) {
+                    console.warn("Nie udało się zapisać granic mapy w pamięci podręcznej:", error);
+                }
+
+                renderGeoJson(data);
+                loadingElement.hidden = true;
+            } catch (error) {
+                console.error("Nie udało się wczytać granic państw:", error);
+                loadingElement.textContent = "Nie udało się wczytać granic państw. Odśwież stronę.";
+            }
+        }
+
+        function getCachedBoundaries() {
+            const cached = localStorage.getItem(cacheKey);
+            if (!cached) return null;
+
+            try {
+                return JSON.parse(cached);
+            } catch (error) {
+                localStorage.removeItem(cacheKey);
+                return null;
+            }
+        }
+
+        function renderGeoJson(data) {
+            countriesLayer = L.geoJSON(data, {
+                style: countryStyle,
+                onEachFeature: (feature, layer) => {
+                    layer.bindTooltip(() => {
+                        const code = countryCode(feature);
+                        return countryCatalog[code]?.name || feature.properties.ADMIN || "Kraj";
+                    }, { sticky: true, direction: "auto" });
+                },
             }).addTo(map);
+
+            updateMap(false);
+        }
+
+        function countryCode(feature) {
+            const properties = feature.properties || {};
+            return [
+                properties.ADM0_A3,
+                properties.ISO_A3_EH,
+                properties.ISO_A3,
+                properties.SOV_A3,
+            ].find((code) => code && code !== "-99");
+        }
+
+        function countryStyle(feature) {
+            const isVisited = activeTraveler.countries.includes(countryCode(feature));
+            return isVisited
+                ? { fillColor: "#176b45", color: "#0b3f28", weight: 1, fillOpacity: 0.8 }
+                : { fillColor: "#cbd6d0", color: "#8c9b93", weight: 0.55, fillOpacity: 0.34 };
+        }
+
+        function updateMap(animate = true) {
+            if (!countriesLayer) return;
+
+            countriesLayer.setStyle(countryStyle);
+            countriesLayer.eachLayer((layer) => {
+                if (activeTraveler.countries.includes(countryCode(layer.feature))) {
+                    layer.bringToFront();
+                }
+            });
+
+            const bounds = L.latLngBounds();
+            countriesLayer.eachLayer((layer) => {
+                if (activeTraveler.countries.includes(countryCode(layer.feature))) {
+                    bounds.extend(layer.getBounds());
+                }
+            });
+
+            if (bounds.isValid()) {
+                map.flyToBounds(bounds, {
+                    animate,
+                    duration: animate ? 0.65 : 0,
+                    maxZoom: 4,
+                    padding: [28, 28],
+                });
+            }
         }
     </script>
 </body>
