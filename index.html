@@ -284,6 +284,29 @@
             font-weight: 700;
         }
 
+        .country-map-label {
+            border: 0;
+            background: transparent;
+            pointer-events: none;
+        }
+
+        .country-map-label span {
+            display: block;
+            padding: 1px 3px;
+            transform: translate(-50%, -50%);
+            color: #46574e;
+            font-size: 0.68rem;
+            font-weight: 700;
+            line-height: 1.05;
+            text-align: center;
+            text-shadow:
+                -1px -1px 0 rgba(255, 255, 255, 0.92),
+                1px -1px 0 rgba(255, 255, 255, 0.92),
+                -1px 1px 0 rgba(255, 255, 255, 0.92),
+                1px 1px 0 rgba(255, 255, 255, 0.92);
+            white-space: nowrap;
+        }
+
         footer {
             padding: 0 20px 28px;
             color: var(--muted);
@@ -402,7 +425,7 @@
         </section>
     </main>
 
-    <footer>Granice państw: Natural Earth · Podkład mapy: OpenStreetMap</footer>
+    <footer>Granice i polskie nazwy państw: Natural Earth · Podkład mapy: CARTO / OpenStreetMap</footer>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="countries.js"></script>
@@ -421,6 +444,7 @@
 
         let activeTraveler = travelers[0];
         let countriesLayer = null;
+        let countryLabelMarkers = [];
 
         validateTravelData();
         createTravelerTabs();
@@ -431,13 +455,20 @@
             worldCopyJump: true,
         }).setView([28, 12], 2);
 
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "&copy; OpenStreetMap contributors",
-            maxZoom: 18,
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+            attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+            maxZoom: 20,
+            subdomains: "abcd",
         }).addTo(map);
 
+        map.createPane("countryLabels");
+        map.getPane("countryLabels").style.zIndex = 450;
+        map.getPane("countryLabels").style.pointerEvents = "none";
+        const countryLabelsLayer = L.layerGroup().addTo(map);
+        map.on("zoomend", updateCountryLabels);
+
         const geoJsonUrl = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson";
-        const cacheKey = "countriesGeoJson-v2";
+        const cacheKey = "countriesGeoJson-v3";
 
         loadCountryBoundaries();
 
@@ -594,12 +625,60 @@
                 onEachFeature: (feature, layer) => {
                     layer.bindTooltip(() => {
                         const code = countryCode(feature);
-                        return countryCatalog[code]?.name || feature.properties.ADMIN || "Kraj";
+                        return activeTraveler.countryLabelOverrides?.[code]
+                            || countryCatalog[code]?.name
+                            || polishCountryName(feature);
                     }, { sticky: true, direction: "auto" });
                 },
             }).addTo(map);
 
+            createCountryLabels(data);
             updateMap(false);
+            updateCountryLabels();
+        }
+
+        function polishCountryName(feature) {
+            return feature.properties?.NAME_PL || "Kraj";
+        }
+
+        function createCountryLabels(data) {
+            countryLabelsLayer.clearLayers();
+            countryLabelMarkers = data.features.flatMap((feature) => {
+                const properties = feature.properties || {};
+                const latitude = Number(properties.LABEL_Y);
+                const longitude = Number(properties.LABEL_X);
+                const minZoom = Number(properties.MIN_LABEL);
+
+                if (![latitude, longitude, minZoom].every(Number.isFinite)) return [];
+
+                const label = document.createElement("span");
+                label.textContent = polishCountryName(feature);
+
+                const marker = L.marker([latitude, longitude], {
+                    interactive: false,
+                    pane: "countryLabels",
+                    icon: L.divIcon({
+                        className: "country-map-label",
+                        html: label.outerHTML,
+                        iconSize: [0, 0],
+                    }),
+                });
+
+                return [{ marker, minZoom }];
+            });
+        }
+
+        function updateCountryLabels() {
+            if (!countryLabelMarkers.length) return;
+
+            const effectiveZoom = Math.max(2, map.getZoom());
+            countryLabelMarkers.forEach(({ marker, minZoom }) => {
+                const shouldBeVisible = minZoom <= effectiveZoom;
+                const isVisible = countryLabelsLayer.hasLayer(marker);
+
+                if (shouldBeVisible && !isVisible) countryLabelsLayer.addLayer(marker);
+                if (!shouldBeVisible && isVisible) countryLabelsLayer.removeLayer(marker);
+            });
         }
 
         function countryCode(feature) {
